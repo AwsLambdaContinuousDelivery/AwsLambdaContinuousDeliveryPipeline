@@ -21,7 +21,7 @@ if __name__ == "__main__":
   build_cf_name = "CfOutputTemplate"
   s3 = template.add_resource(createArtifactStoreS3Location())
   pipelineRole = template.add_resource(
-      createCodepipelineRole("FlightZipperBackendFunctionsPipelineRole"))
+      createCodepipelineRole("FZBackendFunctionsPipelineRole"))
   pipe = PipelineBuilder() \
     .setName("FlightZipperBackendFunctionsPipeline") \
     .setArtStorage(CodePipelineArtifactStore().setS3Bucket(s3).build()) \

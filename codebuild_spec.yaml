@@ -1,0 +1,22 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - apk update
+      - apk upgrade
+      - apk add --no-cache bash git openssh
+  pre_build:
+    commands:
+      - git clone https://github.com/jpotecki/lambdaCICDBuilder.git
+      - cd lambdaCICDBuilder
+      - git log
+      - cd ..
+      - pip3 install git+https://github.com/jpotecki/TroposphereWrapper.git
+  build:
+    commands:
+      - ls -a
+      - python3 lambdaCICDBuilder/createCF.py $(pwd)/ >> stack.json
+artifacts:
+  files:
+    - stack.json

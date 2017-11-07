@@ -6,6 +6,11 @@ from troposphereWrapper.iam import *
 
 from typing import List
 
+def getCodeFromFile(filepath: str) -> List[str]:
+  with open (filepath, "r") as xs:
+    code = xs.readlines()
+  return code
+
 
 def getBuildRole() -> Role:
   codebuildPolicy = PolicyBuilder() \
@@ -19,7 +24,7 @@ def getBuildRole() -> Role:
           ) \
       .build()
   return RoleBuilder() \
-    .setName("ElmCodeBuildRole") \
+    .setName("LambdaCodeBuildRole") \
     .setAssumePolicy(
       RoleBuilderHelper() \
         .defaultAssumeRolePolicyDocument("codebuild.amazonaws.com")
@@ -28,19 +33,24 @@ def getBuildRole() -> Role:
     .build()
 
 
+
+
 def getBuildSpec(input: str) -> List[str]:
-  # TODO: pass in the content in order to build the cloud formation file
-  folder = ""
-  return [ "version: 0.2"
-         , "phases:"
-         , "  build:"
-         , "    commands:"
-         , "      - python3 createCF.py " + folder
-         , "artifacts:"
-         , "  files:"
-         , "    - /*"
-         , "  discard-path: yes"
-         ]
+  return getCodeFromFile("codebuild_spec.yaml")
+#   folder = ""
+#   return [ "version: 0.2\n"
+#          , "\n"
+#          , "phases:\n"
+#          , "  pre_build:\n"
+#          , "    commands:\n"
+#          , "  build:\n"
+#          , "    commands:\n"
+#          , "      - ls -a\n"
+#          , "artifacts:\n"
+#          , "  files:\n"
+#          , "    - /*\n"
+#          , "  discard-path: yes\n"
+#          ]
 
 
 def buildCfWithDockerAction(buildRef, inputName, outputName):
@@ -66,11 +76,12 @@ def buildStage(buildRef, inputName: str, outputName: str) -> Stages:
 
 
 def getCodeBuild(serviceRole: Role, buildspec: List[str]):
-  name = "FrontEndElmAppBuilder"
+  name = "BackEndLambdaBuilder"
   env = CodeBuildEnvBuilder() \
         .setComputeType("BUILD_GENERAL1_SMALL") \
-        .setImage("janosp/lambdacicdbuilder") \
+        .setImage("frolvlad/alpine-python3") \
         .setType("LINUX_CONTAINER") \
+        .setPrivilegedMode(False) \
         .addEnvVars( { "Name": "APP_NAME", "Value": name } ) \
         .build()
   source = CodeBuildSourceBuilder() \
@@ -90,7 +101,7 @@ def getCodeBuild(serviceRole: Role, buildspec: List[str]):
 
 
 def getBuild(template: Template, inputName: str, outputName: str) -> Stages:
-  role = getBuildRole()
+  role = template.add_resource(getBuildRole())
   spec = getBuildSpec(inputName)
   cb = getCodeBuild(role, spec)
   build_ref = template.add_resource(cb)
