@@ -37,20 +37,6 @@ def getBuildRole() -> Role:
 
 def getBuildSpec(input: str) -> List[str]:
   return getCodeFromFile("codebuild_spec.yaml")
-#   folder = ""
-#   return [ "version: 0.2\n"
-#          , "\n"
-#          , "phases:\n"
-#          , "  pre_build:\n"
-#          , "    commands:\n"
-#          , "  build:\n"
-#          , "    commands:\n"
-#          , "      - ls -a\n"
-#          , "artifacts:\n"
-#          , "  files:\n"
-#          , "    - /*\n"
-#          , "  discard-path: yes\n"
-#          ]
 
 
 def buildCfWithDockerAction(buildRef, inputName, outputName):
