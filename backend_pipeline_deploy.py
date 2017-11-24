@@ -19,6 +19,7 @@ def getProdDeploy(t: Template, inName: str, sName: str) -> Stages:
         .addAction(awacs.awslambda.DeleteFunction) \
         .addAction(awacs.awslambda.UpdateFunctionCode) \
         .addAction(awacs.awslambda.UpdateFunctionConfiguration) \
+        .addAction(awacs.awslambda.CreateAlias)
         .setEffect(Effects.Allow) \
         .addResource("*") \
         .build() 
