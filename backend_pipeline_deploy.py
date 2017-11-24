@@ -7,9 +7,9 @@ from troposphere.iam import Role
 from troposphereWrapper.pipeline import *
 from troposphereWrapper.iam import *
 
+from typing import Tuple
 
-
-def getProdDeploy(t: Template, inName: str, sName: str) -> Stages:
+def getDeployResources(t: Template) -> Tuple[ActionTypeID, Role]:
   policyDoc = PolicyDocumentBuilder() \
     .addStatement(StatementBuilder() \
         .addAction(awacs.ec2.Action("*")) \
@@ -19,7 +19,8 @@ def getProdDeploy(t: Template, inName: str, sName: str) -> Stages:
         .addAction(awacs.awslambda.DeleteFunction) \
         .addAction(awacs.awslambda.UpdateFunctionCode) \
         .addAction(awacs.awslambda.UpdateFunctionConfiguration) \
-        .addAction(awacs.awslambda.CreateAlias)
+        .addAction(awacs.awslambda.CreateAlias) \
+        .addAction(awacs.awslambda.DeleteAlias) \
         .setEffect(Effects.Allow) \
         .addResource("*") \
         .build() 
@@ -36,7 +37,7 @@ def getProdDeploy(t: Template, inName: str, sName: str) -> Stages:
         .build()
       ) \
     .build()
-  
+
   policy = Policy( PolicyDocument = policyDoc
                  , PolicyName = "CFDeployPolicy"
                  )
@@ -48,12 +49,6 @@ def getProdDeploy(t: Template, inName: str, sName: str) -> Stages:
           .addPolicy(policy) \
           .build()
          )
-  config =  { "ActionMode" : "CREATE_UPDATE"
-            , "RoleArn" : GetAtt(role, "Arn")
-            , "StackName" : sName
-            , "Capabilities": "CAPABILITY_NAMED_IAM"
-            , "TemplatePath" : inName + "::stack.json"
-            }
 
   actionId = CodePipelineActionTypeIdBuilder() \
       .setCategory(ActionIdCategory.Deploy) \
@@ -61,15 +56,31 @@ def getProdDeploy(t: Template, inName: str, sName: str) -> Stages:
       .setProvider("CloudFormation") \
       .setVersion("1") \
       .build()
+  return [actionId, role]
 
+
+def getDeploy( t: Template
+             , inName: str
+             , stage: str
+             , sName: str
+             , resource: Tuple[ActionTypeID, Role]
+             ) -> Stages:
+  [actionId, role] = resource
+  config = { "ActionMode" : "CREATE_UPDATE"
+           , "RoleArn" : GetAtt(role, "Arn")
+           , "StackName" : sName + stage
+           , "Capabilities": "CAPABILITY_NAMED_IAM"
+           , "TemplatePath" : inName + "::stack" + stage + ".json"
+           }
   action = CodePipelineActionBuilder() \
-      .setName("Deploy" + sName) \
+      .setName("Deploy" + sName + stage) \
       .setActionType(actionId) \
       .addInput(InputArtifacts(Name = inName)) \
+      .addOutput(OutputArtifacts(Name = stage)) \
       .setConfiguration(config) \
       .build()
   
   return CodePipelineStageBuilder() \
-      .setName("DeployStage") \
+      .setName(stage + "_Deploy") \
       .addAction(action) \
       .build()

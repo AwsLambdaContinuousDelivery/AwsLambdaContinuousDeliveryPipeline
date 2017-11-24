@@ -6,7 +6,9 @@ from troposphereWrapper.pipeline import *
 
 from backend_pipeline_source import *
 from backend_pipeline_build import *
+from backend_pipeline_test import *
 from backend_pipeline_deploy import *
+
 from helpers import *
 
 def createArtifactStoreS3Location():
@@ -18,19 +20,21 @@ def createArtifactStoreS3Location():
 
 if __name__ == "__main__":
   template = Template()
-  source_files_name = "CloudFormationSourceLambdaFiles"
+  sfiles_name = "CloudFormationSourceLambdaFiles"
   build_cf_name = "CfOutputTemplate"
   stackName = "FZBackendFunctions"
   s3 = template.add_resource(createArtifactStoreS3Location())
   pipelineRole = template.add_resource(
       createCodepipelineRole("FZBackendFunctionsPipelineRole"))
+  deployRes = getDeployResources(template)
   pipe = PipelineBuilder() \
     .setName("FlightZipperBackendFunctionsPipeline") \
     .setArtStorage(CodePipelineArtifactStore().setS3Bucket(s3).build()) \
     .setCodePipelineServiceRole(pipelineRole) \
-    .addStage(getSource(source_files_name)) \
-    .addStage(getBuild(template, source_files_name, build_cf_name)) \
-    .addStage(getProdDeploy(template, build_cf_name, stackName)) \
+    .addStage(getSource(sfiles_name)) \
+    .addStage(getBuild(template, sfiles_name, build_cf_name)) \
+    .addStage(getDeploy(template, build_cf_name, "Alpha", stackName,deployRes))\
+    .addStage(getDeploy(template, build_cf_name, "PROD", stackName, deployRes))\
     .build()
   template.add_resource(pipe)
   print(template.to_json())

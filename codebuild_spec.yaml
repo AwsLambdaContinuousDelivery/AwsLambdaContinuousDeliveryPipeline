@@ -15,8 +15,9 @@ phases:
       - pip3 install git+https://github.com/jpotecki/TroposphereWrapper.git
   build:
     commands:
-      - ls -a
-      - python3 lambdaCICDBuilder/createCF.py $(pwd)/ >> stack.json
+      - python3 lambdaCICDBuilder/createCF.py --path $(pwd)/ --stage PROD >> stackPROD.json
+      - python3 lambdaCICDBuilder/createCF.py --path $(pwd)/ --stage Alpha >> stackAlpha.json
 artifacts:
   files:
-    - stack.json
+    - stackPROD.json
+    - stackAlpha.json
