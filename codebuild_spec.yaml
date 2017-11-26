@@ -5,18 +5,15 @@ phases:
     commands:
       - apk update
       - apk upgrade
-      - apk add --no-cache bash git openssh
+      - apk add --no-cache bash git openssl
   pre_build:
     commands:
-      - git clone https://github.com/jpotecki/lambdaCICDBuilder.git
-      - cd lambdaCICDBuilder
-      - git log
-      - cd ..
+      - wget https://raw.githubusercontent.com/AwsLambdaContinuousDelivery/lambdaCICDBuilder/master/createCF.py
       - pip3 install git+https://github.com/jpotecki/TroposphereWrapper.git
   build:
     commands:
-      - python3 lambdaCICDBuilder/createCF.py --path $(pwd)/ --stage PROD >> stackPROD.json
-      - python3 lambdaCICDBuilder/createCF.py --path $(pwd)/ --stage Alpha >> stackAlpha.json
+      - python3 createCF.py --path $(pwd)/ --stage PROD >> stackPROD.json
+      - python3 createCF.py --path $(pwd)/ --stage Alpha >> stackAlpha.json
 artifacts:
   files:
     - stackPROD.json

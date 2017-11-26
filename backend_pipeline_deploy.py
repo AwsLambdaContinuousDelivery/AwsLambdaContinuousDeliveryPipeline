@@ -6,6 +6,7 @@ from awacs.awslambda import *
 from troposphere.iam import Role
 from troposphereWrapper.pipeline import *
 from troposphereWrapper.iam import *
+from backend_pipeline_test import *
 
 from typing import Tuple
 
@@ -64,7 +65,7 @@ def getDeploy( t: Template
              , stage: str
              , sName: str
              , resource: Tuple[ActionTypeID, Role]
-             ) -> Stages:
+             , code: str = None) -> Stages:
   [actionId, role] = resource
   config = { "ActionMode" : "CREATE_UPDATE"
            , "RoleArn" : GetAtt(role, "Arn")
@@ -80,7 +81,9 @@ def getDeploy( t: Template
       .setConfiguration(config) \
       .build()
   
-  return CodePipelineStageBuilder() \
+  s = CodePipelineStageBuilder() \
       .setName(stage + "_Deploy") \
-      .addAction(action) \
-      .build()
+      .addAction(action)
+  if code is not None:
+    s.addAction(getTest(t, code, sName, stage))
+  return s.build()

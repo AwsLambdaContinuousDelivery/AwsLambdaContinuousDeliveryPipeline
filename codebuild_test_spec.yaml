@@ -1,11 +1,13 @@
 version: 0.2
 
 phases:
-  pre_build:
+  install:
     commands:
-      - git log
-      - cd ..
+      - apk update
+      - apk upgrade
+      - apk add --no-cache openssl
       - pip3 install boto3
   build:
     commands:
-      - python3 
+      - wget https://raw.githubusercontent.com/AwsLambdaContinuousDelivery/AwsLambdaTesting/master/testRunner.py
+      - ls -a
