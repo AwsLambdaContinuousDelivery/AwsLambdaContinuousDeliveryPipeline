@@ -1,16 +1,11 @@
 from troposphere import Template
 from troposphereWrapper.pipeline import *
 
-
-def getSource(outputfiles: str) -> Stages:
-  return sourceStage("FlightZipperBackEndFunctions", "master", outputfiles)
-
-
-def sourceStage(repo: str, branch: str, outputfiles: str) -> Stages:
+def getSource(outputfiles: str, repo: str, branch: str) -> Stages:
   actionid = CodePipelineActionTypeIdBuilder() \
       .setCodeCommitSource("1") \
       .build()
-  
+
   action = CodePipelineActionBuilder() \
       .setName("BackendCloudformationLambdaSource") \
       .setConfiguration({"BranchName" : branch, "RepositoryName" : repo}) \

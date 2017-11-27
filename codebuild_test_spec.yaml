@@ -9,5 +9,4 @@ phases:
       - pip3 install boto3
   build:
     commands:
-      - wget https://raw.githubusercontent.com/AwsLambdaContinuousDelivery/AwsLambdaTesting/master/testRunner.py
-      - ls -a
+      - wget https://raw.githubusercontent.com/AwsLambdaContinuousDelivery/AwsLambdaTesting/dev/testRunner.py

@@ -9,8 +9,11 @@ from troposphereWrapper.iam import *
 from backend_pipeline_test import *
 
 from typing import Tuple
+import re
 
-def getDeployResources(t: Template) -> Tuple[ActionTypeID, Role]:
+regex = re.compile('[^a-zA-Z0-9]')
+
+def getDeployResources(t: Template, stack: str) -> Tuple[ActionTypeID, Role]:
   policyDoc = PolicyDocumentBuilder() \
     .addStatement(StatementBuilder() \
         .addAction(awacs.ec2.Action("*")) \
@@ -40,11 +43,11 @@ def getDeployResources(t: Template) -> Tuple[ActionTypeID, Role]:
     .build()
 
   policy = Policy( PolicyDocument = policyDoc
-                 , PolicyName = "CFDeployPolicy"
+                 , PolicyName = "CloudFormationDeployPolicy"
                  )
 
   role = t.add_resource( RoleBuilder() \
-          .setName("CFDeplyRole") \
+          .setName(regex.sub('', "CFDeplyRole" + stack)) \
           .setAssumePolicy(RoleBuilderHelper() \
             .defaultAssumeRolePolicyDocument("cloudformation.amazonaws.com")) \
           .addPolicy(policy) \
@@ -63,18 +66,18 @@ def getDeployResources(t: Template) -> Tuple[ActionTypeID, Role]:
 def getDeploy( t: Template
              , inName: str
              , stage: str
-             , sName: str
+             , stack: str
              , resource: Tuple[ActionTypeID, Role]
              , code: str = None) -> Stages:
   [actionId, role] = resource
   config = { "ActionMode" : "CREATE_UPDATE"
            , "RoleArn" : GetAtt(role, "Arn")
-           , "StackName" : sName + stage
+           , "StackName" : Sub("".join([stack,"${AWS::StackName}", stage]))
            , "Capabilities": "CAPABILITY_NAMED_IAM"
            , "TemplatePath" : inName + "::stack" + stage + ".json"
            }
   action = CodePipelineActionBuilder() \
-      .setName("Deploy" + sName + stage) \
+      .setName("Deploy" + stack + stage) \
       .setActionType(actionId) \
       .addInput(InputArtifacts(Name = inName)) \
       .addOutput(OutputArtifacts(Name = stage)) \
@@ -85,5 +88,5 @@ def getDeploy( t: Template
       .setName(stage + "_Deploy") \
       .addAction(action)
   if code is not None:
-    s.addAction(getTest(t, code, sName, stage))
+    s.addAction(getTest(t, code, stack, stage))
   return s.build()

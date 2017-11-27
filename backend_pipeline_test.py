@@ -43,7 +43,7 @@ def buildCfWithDockerAction( buildRef, inputName: str) -> Action:
       .setCodeBuildSource("1") \
       .build()
     return CodePipelineActionBuilder() \
-      .setName("BuildCfWithDockerAction") \
+      .setName("TestCfWithDockerAction") \
       .setActionType(actionid) \
       .addInput(InputArtifacts( Name = inputName )) \
       .setConfiguration( { "ProjectName" : Ref(buildRef) } ) \
@@ -53,9 +53,13 @@ def buildCfWithDockerAction( buildRef, inputName: str) -> Action:
 
 def getBuildSpec(stage: str) -> List[str]:
   spec = getCodeFromFile("codebuild_test_spec.yaml")
-  # I want to see what is inside dat file
   spec.append(
-        Join("",["\n      - python3 testRunner.py -p $(pwd)/ -s " + stage ])
+        Join(" ", [ "\n      - python3 testRunner.py -p $(pwd)/ --stage"
+                  , stage
+                  , "--stack"
+                  , Sub("${AWS::StackName}")
+                  ]
+            )
         )
   return spec
 
