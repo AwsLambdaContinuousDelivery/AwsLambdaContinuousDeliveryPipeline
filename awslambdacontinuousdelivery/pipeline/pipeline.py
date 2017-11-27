@@ -4,12 +4,24 @@ from troposphere import *
 
 from troposphereWrapper.pipeline import *
 
-from awslambdacontinuousdelivery.pipeline.source import *
-from awslambdacontinuousdelivery.pipeline.build import *
-from awslambdacontinuousdelivery.pipeline.tests import *
-from awslambdacontinuousdelivery.pipeline.deploy import *
-from awslambdacontinuousdelivery.pipeline import *
+from source import *
+from build import *
+from tests import *
+from deploy import *
+from pipeline import *
 import argparse
+
+from troposphereWrapper.iam import *
+
+def createCodepipelineRole(name: str) -> Role:
+  return RoleBuilder() \
+      .setName(name) \
+      .setAssumePolicy(
+        RoleBuilderHelper() \
+        .defaultAssumeRolePolicyDocument("codepipeline.amazonaws.com")
+          ) \
+      .addPolicy(RoleBuilderHelper().oneClickCodePipeServicePolicy()) \
+      .build()
 
 def createArtifactStoreS3Location():
   return s3.Bucket(

@@ -33,10 +33,20 @@ def getBuildRole(stackName: str) -> Role:
     .build()
 
 
-def getCodeFromFile(filepath: str) -> List[str]:
-  with open (filepath, "r") as xs:
-    code = xs.readlines()
-  return code
+def getTestBuildCode() -> List[str]:
+  return [ "version: 0.2"
+         , "\n"  
+         , "phases:"  
+         , "  install:" 
+         , "    commands:"  
+         , "      - apk update" 
+         , "      - apk upgrade"  
+         , "      - apk add --no-cache openssl" 
+         , "      - pip3 install boto3" 
+         , "  build:" 
+         , "    commands:"  
+         , "      - wget https://raw.githubusercontent.com/AwsLambdaContinuousDelivery/AwsLambdaTesting/dev/testRunner.py"
+         ]
 
 def buildCfWithDockerAction( buildRef, inputName: str) -> Action:
     actionid = CodePipelineActionTypeIdBuilder() \
@@ -52,7 +62,7 @@ def buildCfWithDockerAction( buildRef, inputName: str) -> Action:
 
 
 def getBuildSpec(stage: str) -> List[str]:
-  spec = getCodeFromFile("codebuild_test_spec.yaml")
+  spec = getTestBuildCode()
   spec.append(
         Join(" ", [ "\n      - python3 testRunner.py -p $(pwd)/ --stage"
                   , stage

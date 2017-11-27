@@ -6,7 +6,7 @@ from awacs.awslambda import *
 from troposphere.iam import Role
 from troposphereWrapper.pipeline import *
 from troposphereWrapper.iam import *
-from backend_pipeline_test import *
+from tests import *
 
 from typing import Tuple
 import re

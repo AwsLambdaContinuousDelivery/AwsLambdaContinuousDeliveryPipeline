@@ -6,11 +6,22 @@ from troposphereWrapper.iam import *
 
 from typing import List
 
-def getCodeFromFile(filepath: str) -> List[str]:
-  with open (filepath, "r") as xs:
-    code = xs.readlines()
-  return code
-
+def getBuildCode() -> List[str]:
+  return [ "version: 0.2"
+         , "\n"
+         , "phases:"
+         , "  install:"
+         , "    commands:"
+         , "      - apk update"
+         , "      - apk upgrade"
+         , "      - apk add --no-cache bash git openssl"
+         , "  pre_build:"
+         , "    commands:"
+         , "      - wget https://raw.githubusercontent.com/AwsLambdaContinuousDelivery/AwsLambdaContinuousDeliveryLambdaCfGenerator/dev/createCF.py"
+         , "      - pip3 install git+https://github.com/jpotecki/TroposphereWrapper.git"
+         , "  build:"
+         , "    commands:"
+         ]
 
 def getBuildRole() -> Role:
   codebuildPolicy = PolicyBuilder() \
@@ -36,7 +47,7 @@ def getBuildRole() -> Role:
 
 
 def getBuildSpec(input: str, stages: List[str]) -> List[str]:
-  file_code = getCodeFromFile("codebuild_spec.yaml")
+  file_code = getBuildCode()
   stage_cmds = []
   for s in stages:
     x = Join(" ", [ "      - python3 createCF.py --path $(pwd)/ --stage"
