@@ -1,92 +1,95 @@
-from troposphere import Template, GetAtt, Ref, Sub
 
-from awacs.ec2 import *
+
+from awacs.aws import Allow
 from awacs.iam import *
 from awacs.awslambda import *
-from troposphere.iam import Role
-from troposphereWrapper.pipeline import *
-from troposphereWrapper.iam import *
-from tests import *
+
+from awslambdacontinuousdelivery.tools import alphanum
+from awslambdacontinuousdelivery.tools.iam import defaultAssumeRolePolicyDocument
+from awslambdacontinuousdelivery.pipeline.tests import getTest
+
+from troposphere import Template, GetAtt, Ref, Sub
+from troposphere.codepipeline import ( ActionTypeID
+  , Actions, Stages, OutputArtifacts, InputArtifacts )
+from troposphere.iam import Role, Policy
 
 from typing import Tuple
+
+import awacs.aws
+import awacs.ec2
 import re
 
-regex = re.compile('[^a-zA-Z0-9]')
-
-def getDeployResources(t: Template, stack: str) -> Tuple[ActionTypeID, Role]:
-  policyDoc = PolicyDocumentBuilder() \
-    .addStatement(StatementBuilder() \
-        .addAction(awacs.ec2.Action("*")) \
-        .addAction(awacs.awslambda.GetFunction) \
-        .addAction(awacs.awslambda.CreateFunction) \
-        .addAction(awacs.awslambda.GetFunctionConfiguration) \
-        .addAction(awacs.awslambda.DeleteFunction) \
-        .addAction(awacs.awslambda.UpdateFunctionCode) \
-        .addAction(awacs.awslambda.UpdateFunctionConfiguration) \
-        .addAction(awacs.awslambda.CreateAlias) \
-        .addAction(awacs.awslambda.DeleteAlias) \
-        .setEffect(Effects.Allow) \
-        .addResource("*") \
-        .build() 
-      ) \
-    .addStatement(StatementBuilder() \
-        .addAction(awacs.iam.DeleteRole) \
-        .addAction(awacs.iam.DeleteRolePolicy) \
-        .addAction(awacs.iam.GetRole) \
-        .addAction(awacs.iam.PutRolePolicy) \
-        .addAction(awacs.iam.CreateRole) \
-        .addAction(awacs.iam.PassRole)
-        .setEffect(Effects.Allow) \
-        .addResource("*") \
-        .build()
-      ) \
-    .build()
-
-  policy = Policy( PolicyDocument = policyDoc
+def getDeployResources(t: Template) -> Tuple[ActionTypeID, Role]:
+  statements = [
+      awacs.aws.Statement(
+          Action = [ awacs.ec2.Action("*")
+                   , awacs.awslambda.GetFunction
+                   , awacs.awslambda.CreateFunction
+                   , awacs.awslambda.GetFunctionConfiguration
+                   , awacs.awslambda.DeleteFunction
+                   , awacs.awslambda.UpdateFunctionCode
+                   , awacs.awslambda.UpdateFunctionConfiguration
+                   , awacs.awslambda.CreateAlias
+                   , awacs.awslambda.DeleteAlias
+                   ]
+        , Resource = [ "*" ]
+        , Effect = awacs.aws.Allow
+        )
+    , awacs.aws.Statement(
+          Action = [ awacs.iam.DeleteRole
+                   , awacs.iam.DeleteRolePolicy
+                   , awacs.iam.GetRole
+                   , awacs.iam.PutRolePolicy
+                   , awacs.iam.CreateRole
+                   , awacs.iam.PassRole
+                   ]
+        , Resource = [ "*" ]
+        , Effect = awacs.aws.Allow
+        )
+    ]
+  policy_doc = awacs.aws.Policy( Statement = statements )
+  policy = Policy( PolicyDocument = policy_doc
                  , PolicyName = "CloudFormationDeployPolicy"
                  )
-
-  role = t.add_resource( RoleBuilder() \
-          .setName(regex.sub('', "CFDeplyRole" + stack)) \
-          .setAssumePolicy(RoleBuilderHelper() \
-            .defaultAssumeRolePolicyDocument("cloudformation.amazonaws.com")) \
-          .addPolicy(policy) \
-          .build()
-         )
-
-  actionId = CodePipelineActionTypeIdBuilder() \
-      .setCategory(ActionIdCategory.Deploy) \
-      .setOwner(ActionIdOwner.AWS) \
-      .setProvider("CloudFormation") \
-      .setVersion("1") \
-      .build()
-  return [actionId, role]
+  assume = defaultAssumeRolePolicyDocument("cloudformation.amazonaws.com")
+  role = t.add_resource(
+         Role( "CFDeployRole"
+             , RoleName = Sub("${AWS::StackName}-CFDeployRole")
+             , AssumeRolePolicyDocument = assume
+             , Policies = [policy]
+             )
+      )
+  actionId = ActionTypeID( Category = "Deploy"
+                         , Owner = "AWS"
+                         , Version = "1"
+                         , Provider = "CloudFormation"
+                         )
+  return (actionId, role)
 
 
 def getDeploy( t: Template
              , inName: str
              , stage: str
-             , stack: str
              , resource: Tuple[ActionTypeID, Role]
-             , code: str = None) -> Stages:
+             , code: str = None
+             ) -> Stages:
   [actionId, role] = resource
   config = { "ActionMode" : "CREATE_UPDATE"
            , "RoleArn" : GetAtt(role, "Arn")
-           , "StackName" : Sub("".join([stack,"${AWS::StackName}", stage]))
+           , "StackName" : Sub("".join(["${AWS::StackName}Functions", stage]))
            , "Capabilities": "CAPABILITY_NAMED_IAM"
            , "TemplatePath" : inName + "::stack" + stage + ".json"
            }
-  action = CodePipelineActionBuilder() \
-      .setName("Deploy" + stack + stage) \
-      .setActionType(actionId) \
-      .addInput(InputArtifacts(Name = inName)) \
-      .addOutput(OutputArtifacts(Name = stage)) \
-      .setConfiguration(config) \
-      .build()
-  
-  s = CodePipelineStageBuilder() \
-      .setName(stage + "_Deploy") \
-      .addAction(action)
+  actions = [ Actions( Name = "Deploy" + stage
+                     , ActionTypeId = actionId
+                     , InputArtifacts = [InputArtifacts( Name = inName )]
+                     , RunOrder = "1"
+                     , Configuration = config
+                     )
+            ]
   if code is not None:
-    s.addAction(getTest(t, code, stack, stage))
-  return s.build()
+    actions.append(getTest(t, code, stage))
+  return Stages( stage + "Deploy"
+               , Name = stage + "_Deploy"
+               , Actions = actions
+               )

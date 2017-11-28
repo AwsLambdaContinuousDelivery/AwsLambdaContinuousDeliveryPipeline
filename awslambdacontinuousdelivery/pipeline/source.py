@@ -1,19 +1,22 @@
-from troposphere import Template
-from troposphereWrapper.pipeline import *
+from troposphere import Template, Sub
+from troposphere.codepipeline import ( Stages
+                                     , Actions
+                                     , ActionTypeID
+                                     , OutputArtifacts
+                                     )
 
 def getSource(outputfiles: str, repo: str, branch: str) -> Stages:
-  actionid = CodePipelineActionTypeIdBuilder() \
-      .setCodeCommitSource("1") \
-      .build()
-
-  action = CodePipelineActionBuilder() \
-      .setName("BackendCloudformationLambdaSource") \
-      .setConfiguration({"BranchName" : branch, "RepositoryName" : repo}) \
-      .setActionType(actionid) \
-      .addOutput(OutputArtifacts( Name = outputfiles)) \
-      .build()
-
-  return CodePipelineStageBuilder() \
-      .setName("Source") \
-      .addAction(action) \
-      .build()
+  actionId = ActionTypeID( Category = "Source"
+                         , Owner = "AWS"
+                         , Version = "1"
+                         , Provider = "CodeCommit"
+                         )
+  action = Actions( Name = Sub("${AWS::StackName}-LambdaSource")
+                  , ActionTypeId = actionId
+                  , Configuration = {"BranchName" : branch, "RepositoryName" : repo}
+                  , OutputArtifacts = [OutputArtifacts( Name = outputfiles)]
+                  , RunOrder = "1"
+                  )
+  return Stages( Name = "Source"
+               , Actions = [ action ]
+               )

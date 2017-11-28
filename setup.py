@@ -6,9 +6,11 @@ setup( name='pyAwsLambdaContinuousDeliveryPipeline'
      , version = '0.0.1'
      , description = 'pyAwsLambdaContinuousDeliveryPipeline'
      , author = 'Janos Potecki'
-     , url = 'https://github.com/AwsLambdaContinuousDelivery/pyAwsLambdaContinuousDeliveryPipeline'
+     , url = 'https://github.com/AwsLambdaContinuousDelivery/AwsLambdaContinuousDeliveryPipeline'
      , packages = ['awslambdacontinuousdelivery.pipeline']
-     , install_requires = [
-          'troposphere', 'awacs'
-      ]
+     , license='MIT'
+     , install_requires = [ 
+          'troposphere'
+        , 'awacs'
+        ]
      )

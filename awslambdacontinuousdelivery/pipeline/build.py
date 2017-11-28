@@ -1,10 +1,17 @@
-from troposphere import Template, Ref
+from awacs.aws import Statement, Allow, Action
+from awslambdacontinuousdelivery.tools import alphanum
+from awslambdacontinuousdelivery.tools.iam import defaultAssumeRolePolicyDocument
 
-from troposphereWrapper.codebuild import *
-from troposphereWrapper.pipeline import *
-from troposphereWrapper.iam import *
+from troposphere import Template, Ref, Sub, Join
+from troposphere.codebuild import ( Project
+  , Environment, Source, Artifacts )
+from troposphere.codepipeline import ( InputArtifacts
+  , Actions, Stages, ActionTypeID, OutputArtifacts )
+from troposphere.iam import Role, Policy
 
 from typing import List
+
+import awacs.aws
 
 def getBuildCode() -> List[str]:
   return [ "version: 0.2"
@@ -17,33 +24,34 @@ def getBuildCode() -> List[str]:
          , "      - apk add --no-cache bash git openssl"
          , "  pre_build:"
          , "    commands:"
+         , "      - pip3 install troposphere"
+         , "      - pip3 install awacs"
+         , "      - git clone https://github.com/AwsLambdaContinuousDelivery/AwsLambdaContinuousDeliveryTools.git"
+         , "      - cd AwsLambdaContinuousDeliveryTools"
+         , "      - pip3 install ."
+         , "      - cd .."
+         , "      - rm -rf AwsLambdaContinuousDeliveryTools"
          , "      - wget https://raw.githubusercontent.com/AwsLambdaContinuousDelivery/AwsLambdaContinuousDeliveryLambdaCfGenerator/dev/createCF.py"
-         , "      - pip3 install git+https://github.com/jpotecki/TroposphereWrapper.git"
          , "  build:"
          , "    commands:"
          ]
 
+
 def getBuildRole() -> Role:
-  codebuildPolicy = PolicyBuilder() \
-      .setName("CodeBuildPolicy") \
-      .addStatement(
-        StatementBuilder() \
-          .setEffect(Effects.Allow) \
-          .addAction(awacs.aws.Action("*")) \
-          .addResource("*")
-          .build() \
-          ) \
-      .build()
-  return RoleBuilder() \
-    .setName("LambdaCodeBuildRole") \
-    .setAssumePolicy(
-      RoleBuilderHelper() \
-        .defaultAssumeRolePolicyDocument("codebuild.amazonaws.com")
-      ) \
-    .addPolicy(codebuildPolicy) \
-    .build()
-
-
+  statement = Statement( Action = [ Action("*") ]
+                       , Effect = Allow
+                       , Resource = ["*"]
+                       )
+  policy_doc = awacs.aws.Policy( Statement = [ statement ] )
+  policy = Policy( PolicyName = Sub("${AWS::StackName}-CodeBuildPolicy")
+                 , PolicyDocument = policy_doc
+                 )
+  assume = defaultAssumeRolePolicyDocument("codebuild.amazonaws.com")
+  return Role( "CodeBuildRole"
+             , RoleName = Sub("${AWS::StackName}-LambdaCodeBuildRole")
+             , AssumeRolePolicyDocument = assume
+             , Policies = [policy]
+             )
 
 
 def getBuildSpec(input: str, stages: List[str]) -> List[str]:
@@ -81,51 +89,47 @@ def getBuildSpec(input: str, stages: List[str]) -> List[str]:
   file_code.append(artifacts)
   return file_code
 
-def buildCfWithDockerAction(buildRef, inputName, outputName):
-    actionid = CodePipelineActionTypeIdBuilder() \
-      .setCodeBuildSource("1") \
-      .build()
-    return CodePipelineActionBuilder() \
-      .setName("BuildCfWithDockerAction") \
-      .setActionType(actionid) \
-      .addInput(InputArtifacts( Name = inputName )) \
-      .addOutput(OutputArtifacts( Name = outputName )) \
-      .setConfiguration( { "ProjectName" : Ref(buildRef) } ) \
-      .build()
+
+def buildCfWithDockerAction(buildRef, inputName, outputName) -> Actions:
+  actionId = ActionTypeID( Category = "Build"
+                         , Owner = "AWS"
+                         , Version = "1"
+                         , Provider = "CodeBuild"
+                         )
+  return Actions( Name = Sub("${AWS::StackName}-CfBuilderAction")
+                , ActionTypeId = actionId
+                , InputArtifacts = [InputArtifacts( Name = inputName )]
+                , OutputArtifacts =[OutputArtifacts( Name = outputName)]
+                , RunOrder = "1"
+                , Configuration = { "ProjectName" : Ref(buildRef) }
+                )
 
 
 def buildStage(buildRef, inputName: str, outputName: str) -> Stages:
-    action = buildCfWithDockerAction( \
-                  buildRef, inputName, outputName)
-    return CodePipelineStageBuilder() \
-      .setName("Build") \
-      .addAction(action) \
-      .build()
+    action = buildCfWithDockerAction(buildRef, inputName, outputName)
+    return Stages( "CfBuild"
+                 , Name = "Build"
+                 , Actions = [ action ]
+                 )
 
 
-def getCodeBuild(serviceRole: Role, buildspec: List[str]):
-  name = "BackEndLambdaBuilder"
-  env = CodeBuildEnvBuilder() \
-        .setComputeType("BUILD_GENERAL1_SMALL") \
-        .setImage("frolvlad/alpine-python3") \
-        .setType("LINUX_CONTAINER") \
-        .setPrivilegedMode(False) \
-        .addEnvVars( { "Name": "APP_NAME", "Value": name } ) \
-        .build()
-  source = CodeBuildSourceBuilder() \
-        .setType(CBSourceType.CodePipeline) \
-        .setBuildSpec(Join("", buildspec)) \
-        .build()
-  artifacts = CodeBuildArtifactsBuilder() \
-        .setType(CBArtifactType.CodePipeline) \
-        .build()
-  return CodeBuildBuilder() \
-        .setArtifacts(artifacts) \
-        .setEnvironment(env) \
-        .setSource(source) \
-        .setName(name) \
-        .setServiceRole(Ref(serviceRole)) \
-        .build()
+def getCodeBuild(serviceRole: Role, buildspec: List[str]) -> Project:
+  env = Environment( ComputeType = "BUILD_GENERAL1_SMALL"
+                   , Image = "frolvlad/alpine-python3"
+                   , Type = "LINUX_CONTAINER"
+                   , PrivilegedMode = False
+                   )
+  source = Source( Type = "CODEPIPELINE"
+                 , BuildSpec = Join("\n", buildspec )
+                 )
+  artifacts = Artifacts( Type = "CODEPIPELINE" )
+  return Project( "BackEndLambdaBuilder"
+                , Name = Sub("${AWS::StackName}-LambdaBuilder")
+                , Environment = env
+                , Source = source
+                , Artifacts = artifacts
+                , ServiceRole = Ref(serviceRole)
+                )
 
 
 def getBuild( template: Template

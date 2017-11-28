@@ -1,70 +1,69 @@
+from awacs.aws import Statement, Allow, Action
+from awslambdacontinuousdelivery.tools import alphanum
+from awslambdacontinuousdelivery.tools.iam import defaultAssumeRolePolicyDocument
 
-from awacs.awslambda import *
-from troposphere.codepipeline import *
-from troposphere.iam import Role
 from troposphere import Template, Join, Sub, Ref
-from troposphere.codebuild import *
-from troposphereWrapper.codebuild import *
-from troposphereWrapper.pipeline import *
-from troposphereWrapper.iam import *
+from troposphere.codebuild import Project, Environment, Source, Artifacts
+from troposphere.codepipeline import (Stages, Actions, ActionTypeID
+  , InputArtifacts)
+from troposphere.iam import Role, Policy
+
 from typing import List
 
-#TODO: a lot of dublication with the build stage here, 
-# I should do the build stage more generic
-# or introduce helpers
-def getBuildRole(stackName: str) -> Role:
-  codebuildPolicy = PolicyBuilder() \
-      .setName(stackName + "TstCBPolicy") \
-      .addStatement(
-        StatementBuilder() \
-          .setEffect(Effects.Allow) \
-          .addAction(awacs.aws.Action("*")) \
-          .addResource("*")
-          .build() \
-          ) \
-      .build()
-  return RoleBuilder() \
-    .setName(stackName + "TstCBRole") \
-    .setAssumePolicy(
-      RoleBuilderHelper() \
-        .defaultAssumeRolePolicyDocument("codebuild.amazonaws.com")
-      ) \
-    .addPolicy(codebuildPolicy) \
-    .build()
+import awacs.aws
+
+def getBuildRole(stage: str = "") -> Role:
+  statement = Statement( Action = [ Action("*") ]
+                       , Effect = Allow
+                       , Resource = ["*"]
+                       )
+  policy_doc = awacs.aws.Policy( Statement = [ statement ] )
+  policy = Policy( PolicyName = Sub("${AWS::StackName}-TestBuilderPolicy")
+                 , PolicyDocument = policy_doc
+                 )
+  assume = defaultAssumeRolePolicyDocument("codebuild.amazonaws.com")
+  return Role( "TestBuilderRole" + stage
+             , RoleName = Sub("LambdaTestBuilderRole-${AWS::StackName}"+stage)
+             , AssumeRolePolicyDocument = assume
+             , Policies = [policy]
+             )
 
 
 def getTestBuildCode() -> List[str]:
   return [ "version: 0.2"
-         , "\n"  
-         , "phases:"  
-         , "  install:" 
-         , "    commands:"  
-         , "      - apk update" 
-         , "      - apk upgrade"  
-         , "      - apk add --no-cache openssl" 
-         , "      - pip3 install boto3" 
+         , "\n"
+         , "phases:"
+         , "  install:"
+         , "    commands:"
+         , "      - apk update"
+         , "      - apk upgrade"
+         , "      - apk add --no-cache openssl"
+         , "      - pip3 install boto3"
          , "  build:" 
-         , "    commands:"  
+         , "    commands:"
          , "      - wget https://raw.githubusercontent.com/AwsLambdaContinuousDelivery/AwsLambdaTesting/dev/testRunner.py"
          ]
 
+
 def buildCfWithDockerAction( buildRef, inputName: str) -> Action:
-    actionid = CodePipelineActionTypeIdBuilder() \
-      .setCodeBuildSource("1") \
-      .build()
-    return CodePipelineActionBuilder() \
-      .setName("TestCfWithDockerAction") \
-      .setActionType(actionid) \
-      .addInput(InputArtifacts( Name = inputName )) \
-      .setConfiguration( { "ProjectName" : Ref(buildRef) } ) \
-      .setRunOrder(2)\
-      .build()
+  actionId = ActionTypeID( Category = "Build"
+                         , Owner = "AWS"
+                         , Version = "1"
+                         , Provider = "CodeBuild"
+                         )
+  return Actions( Name = Sub("${AWS::StackName}-TestCfBuilderAction")
+                , ActionTypeId = actionId
+                , InputArtifacts = [ InputArtifacts( Name = inputName ) ]
+                , RunOrder = "2"
+                , Configuration = { "ProjectName" : Ref(buildRef) }
+                )
 
 
 def getBuildSpec(stage: str) -> List[str]:
   spec = getTestBuildCode()
+  spec.append("\n")
   spec.append(
-        Join(" ", [ "\n      - python3 testRunner.py -p $(pwd)/ --stage"
+        Join(" ", [ "      - python3 testRunner.py -p $(pwd)/ --stage"
                   , stage
                   , "--stack"
                   , Sub("${AWS::StackName}")
@@ -73,20 +72,19 @@ def getBuildSpec(stage: str) -> List[str]:
         )
   return spec
 
-def getCodeBuild(serviceRole: Role, name: str, buildspec: List[str]) -> Project:
+
+def getCodeBuild(serviceRole: Role, stage: str, buildspec: List[str]) -> Project:
   env = Environment( ComputeType = "BUILD_GENERAL1_SMALL"
                    , Image = "frolvlad/alpine-python3"
                    , Type = "LINUX_CONTAINER"
                    , PrivilegedMode = False
                    )
-  source = CodeBuildSourceBuilder() \
-        .setType(CBSourceType.CodePipeline) \
-        .setBuildSpec(Join("", buildspec)) \
-        .build()
-  artifacts = Artifacts( Type = "CODEPIPELINE")
-
-  return Project( name,
-                  Name = Sub(name + "-${AWS::StackName}")
+  source = Source( Type = "CODEPIPELINE"
+                 , BuildSpec = Join("\n", buildspec )
+                 )
+  artifacts = Artifacts( Type = "CODEPIPELINE" )
+  return Project( alphanum("TestBuild" + stage)
+                , Name = Sub("${AWS::StackName}-" + stage)
                 , Environment = env
                 , Source = source
                 , Artifacts = artifacts
@@ -94,10 +92,9 @@ def getCodeBuild(serviceRole: Role, name: str, buildspec: List[str]) -> Project:
                 )
 
 
-def getTest(t: Template, inputArt: str, stackName: str, stage: str) -> Action:
-  name = stackName + stage
-  role = t.add_resource(getBuildRole(name))
+def getTest(t: Template, inputArt: str, stage: str) -> Action:
+  role = t.add_resource(getBuildRole(stage))
   buildspec = getBuildSpec(stage)
-  cb = getCodeBuild(role, name, buildspec)
+  cb = getCodeBuild(role, stage, buildspec)
   build_ref = t.add_resource(cb)
   return buildCfWithDockerAction(build_ref, inputArt)
