@@ -35,11 +35,9 @@ def getTestBuildCode() -> List[str]:
          , "phases:"
          , "  install:"
          , "    commands:"
-         , "      - apk update"
-         , "      - apk upgrade"
          , "      - apk add --no-cache openssl"
-         , "      - pip3 install boto3"
-         , "  build:" 
+         , "      - pip3 install boto3 pyyaml"
+         , "  build:"
          , "    commands:"
          , "      - wget https://raw.githubusercontent.com/AwsLambdaContinuousDelivery/AwsLambdaTesting/dev/testRunner.py"
          ]

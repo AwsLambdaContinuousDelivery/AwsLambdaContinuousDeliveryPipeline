@@ -13,11 +13,14 @@ from troposphere.codepipeline import ( ActionTypeID
   , Actions, Stages, OutputArtifacts, InputArtifacts )
 from troposphere.iam import Role, Policy
 
-from typing import Tuple
+from typing import Tuple, List
 
 import awacs.aws
 import awacs.ec2
+import awacs.s3
 import re
+import json
+
 
 def getDeployResources(t: Template) -> Tuple[ActionTypeID, Role]:
   statements = [
@@ -31,6 +34,7 @@ def getDeployResources(t: Template) -> Tuple[ActionTypeID, Role]:
                    , awacs.awslambda.UpdateFunctionConfiguration
                    , awacs.awslambda.CreateAlias
                    , awacs.awslambda.DeleteAlias
+                   , awacs.s3.GetObject
                    ]
         , Resource = [ "*" ]
         , Effect = awacs.aws.Allow
@@ -71,18 +75,26 @@ def getDeploy( t: Template
              , inName: str
              , stage: str
              , resource: Tuple[ActionTypeID, Role]
+             , interimArt: str #artifact containing func code incl. libs
              , code: str = None
              ) -> Stages:
+  params = { "S3Key" : { "Fn::GetArtifactAtt" : [ interimArt, "ObjectKey" ] }
+           , "S3Storage" : { "Fn::GetArtifactAtt" : [ interimArt, "BucketName" ] }
+           }
+  params = json.dumps(params)
+  params = params.replace('"', '\"').replace('\n', '\\n')
   [actionId, role] = resource
   config = { "ActionMode" : "CREATE_UPDATE"
            , "RoleArn" : GetAtt(role, "Arn")
            , "StackName" : Sub("".join(["${AWS::StackName}Functions", stage]))
            , "Capabilities": "CAPABILITY_NAMED_IAM"
            , "TemplatePath" : inName + "::stack" + stage + ".json"
+           , "ParameterOverrides" : params
            }
+  arts = map(lambda x: InputArtifacts(Name = x), [inName, interimArt])
   actions = [ Actions( Name = "Deploy" + stage
                      , ActionTypeId = actionId
-                     , InputArtifacts = [InputArtifacts( Name = inName )]
+                     , InputArtifacts = list(arts)
                      , RunOrder = "1"
                      , Configuration = config
                      )

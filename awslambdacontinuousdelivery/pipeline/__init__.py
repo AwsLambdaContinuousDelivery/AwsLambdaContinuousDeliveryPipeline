@@ -1,6 +1,6 @@
 
 from awslambdacontinuousdelivery.pipeline.source import *
-from awslambdacontinuousdelivery.pipeline.build import *
+from awslambdacontinuousdelivery.python.build import buildStage
 from awslambdacontinuousdelivery.pipeline.tests import *
 from awslambdacontinuousdelivery.pipeline.deploy import *
 from awslambdacontinuousdelivery.tools import alphanum
@@ -28,25 +28,12 @@ def createArtifactStoreS3Location():
     )
 
 
-def createPipeline(prefix: str, stages: List[str] = []) -> str:
+def createPipeline(stages: List[str] = [], github: bool = False) -> str:
   template = Template()
-  repo = template.add_parameter(
-    Parameter( "repo"
-             , Description="url of the repository"
-             , Type="String"
-             ) 
-    )
-  branch = template.add_parameter(
-    Parameter( "branch"
-             , Description="branch triggering deployment"
-             , Type="String"
-             ) 
-    )
-  repo = Ref(repo)
-  branch = Ref(branch)
   stackName = Sub("${AWS::StackName}")
-  sfiles_name = "SourceFiles"
-  build_cf_name = "CfOutputTemplate"
+  source = "SourceFiles"
+  interimArt = "FunctionDeployCode"
+  CfTemplate = "CfOutputTemplate"
 
   s3 = template.add_resource(createArtifactStoreS3Location())
   pipelineRole = template.add_resource(
@@ -55,11 +42,14 @@ def createPipeline(prefix: str, stages: List[str] = []) -> str:
   deployRes = getDeployResources(template)
   
   pipe_stages = []
-  pipe_stages.append(getSource(sfiles_name, repo, branch))
-  pipe_stages.append(getBuild(template, sfiles_name, build_cf_name, stages))
+  pipe_stages.append(getSource(template, github, source))
+  pipe_stages.append(buildStage(template, source, interimArt, CfTemplate, stages))
+
   for s in stages:
-    pipe_stages.append(getDeploy(template, build_cf_name, s.capitalize(), deployRes, sfiles_name))
-  pipe_stages.append(getDeploy(template, build_cf_name,"PROD", deployRes))
+    pipe_stages.append(
+      getDeploy(template,CfTemplate,s.capitalize(),deployRes, interimArt, source))
+  pipe_stages.append(
+      getDeploy(template, CfTemplate,"PROD", deployRes, interimArt, source))
 
   artifactstore = ArtifactStore( Type = "S3", Location = Ref(s3))
 
