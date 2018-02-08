@@ -3,8 +3,6 @@ from awslambdacontinuousdelivery.pipeline import createPipeline
 import argparse
 import sys
 
-from cfn_flip import to_yaml
-
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
   parser.add_argument("--github", help = "source is GitHub", required = False, action = "store_true", default = False)
@@ -14,4 +12,3 @@ if __name__ == "__main__":
     args.stages = []
   some_json = createPipeline(args.stages, args.github)
   print(some_json)
-  # print(to_yaml(some_json, clean_up=True))

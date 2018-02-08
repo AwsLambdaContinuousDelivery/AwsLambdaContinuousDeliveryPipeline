@@ -1,8 +1,14 @@
+# By Janos Potecki
+# University College London
+# January 2018
 
-from awslambdacontinuousdelivery.pipeline.source import *
-from awslambdacontinuousdelivery.python.build import buildStage
-from awslambdacontinuousdelivery.pipeline.tests import *
-from awslambdacontinuousdelivery.pipeline.deploy import *
+from awslambdacontinuousdelivery.source.codecommit import getCodeCommit
+from awslambdacontinuousdelivery.source.github import getGitHub
+from awslambdacontinuousdelivery.python.build import getBuild
+from awslambdacontinuousdelivery.deploy import getDeploy
+from awslambdacontinuousdelivery.python.test.unittest import getUnittest
+from awslambdacontinuousdelivery.notifications import addFailureNotifications
+from awslambdacontinuousdelivery.notifications.sns import getEmailTopic, getTopicPolicy
 from awslambdacontinuousdelivery.tools import alphanum
 from awslambdacontinuousdelivery.tools.iam import *
 
@@ -27,8 +33,15 @@ def createArtifactStoreS3Location():
     , AccessControl = "Private"
     )
 
+def getSource(t: Template, github: bool, outputfiles: str) -> Stages:
+  if github:
+    return getGitHub(t, outputfiles)
+  return getCodeCommit(t, outputfiles)
 
-def createPipeline(stages: List[str] = [], github: bool = False) -> str:
+
+def createPipelineTemplate( stages: List[str] = []
+                          , github: bool = False
+                          ) -> Template:
   template = Template()
   stackName = Sub("${AWS::StackName}")
   source = "SourceFiles"
@@ -38,18 +51,17 @@ def createPipeline(stages: List[str] = [], github: bool = False) -> str:
   s3 = template.add_resource(createArtifactStoreS3Location())
   pipelineRole = template.add_resource(
       createCodepipelineRole("PipelineRole"))
-  
-  deployRes = getDeployResources(template)
-  
+
   pipe_stages = []
-  pipe_stages.append(getSource(template, github, source))
-  pipe_stages.append(buildStage(template, source, interimArt, CfTemplate, stages))
+  pipe_stages.append(getSource(template, github, source)) # also own package
+  pipe_stages.append(getUnittest(template, source))
+  pipe_stages.append(getBuild(template, source, interimArt, CfTemplate, stages))
 
   for s in stages:
     pipe_stages.append(
-      getDeploy(template,CfTemplate,s.capitalize(),deployRes, interimArt, source))
+      getDeploy(template, CfTemplate, s.capitalize(), interimArt, source, add_tests = True))
   pipe_stages.append(
-      getDeploy(template, CfTemplate,"PROD", deployRes, interimArt, source))
+      getDeploy(template, CfTemplate, "PROD", interimArt))
 
   artifactstore = ArtifactStore( Type = "S3", Location = Ref(s3))
 
@@ -60,5 +72,17 @@ def createPipeline(stages: List[str] = [], github: bool = False) -> str:
                      , ArtifactStore = artifactstore
                      )
   template.add_resource(pipeline)
-  return template.to_json()
 
+  # Add notifications in case something fails
+  email = Parameter( "FailureNotificationEmailAddressParameter"
+                   , Type = "String"
+                   ,  Description = "E-Mail Address getting notified if any stage fails"
+                   )
+  email = template.add_parameter(email)
+  emailTopic = getEmailTopic("StateFailures", Ref(email))
+  notificationRole = addFailureNotifications(template, Ref(pipeline), emailTopic)
+  
+  return template
+
+def createPipeline(stages: List[str] = [], github: bool = False) -> str:
+  return createPipelineTemplate(stages, github).to_json()

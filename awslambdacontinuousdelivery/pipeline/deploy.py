@@ -6,7 +6,7 @@ from awacs.awslambda import *
 
 from awslambdacontinuousdelivery.tools import alphanum
 from awslambdacontinuousdelivery.tools.iam import defaultAssumeRolePolicyDocument
-from awslambdacontinuousdelivery.pipeline.tests import getTest
+from awslambdacontinuousdelivery.python.test import getTest
 
 from troposphere import Template, GetAtt, Ref, Sub
 from troposphere.codepipeline import ( ActionTypeID

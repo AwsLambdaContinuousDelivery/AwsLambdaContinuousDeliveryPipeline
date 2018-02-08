@@ -12,6 +12,5 @@ setup( name='pyAwsLambdaContinuousDeliveryPipeline'
      , install_requires = [ 
           'troposphere'
         , 'awacs'
-        , 'cfn_flip'
         ]
      )
