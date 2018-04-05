@@ -8,7 +8,7 @@ from awslambdacontinuousdelivery.python.build import getBuild
 from awslambdacontinuousdelivery.deploy import getDeploy
 from awslambdacontinuousdelivery.python.test.unittest import getUnittest
 from awslambdacontinuousdelivery.notifications import addFailureNotifications
-from awslambdacontinuousdelivery.notifications.sns import getEmailTopic, getTopicPolicy
+from awslambdacontinuousdelivery.notifications.sns import getEmailTopic
 from awslambdacontinuousdelivery.tools import alphanum
 from awslambdacontinuousdelivery.tools.iam import *
 
